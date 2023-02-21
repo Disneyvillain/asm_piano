@@ -5,29 +5,30 @@ DATASEG
 char db ?
 Octave_num db 3
 ;graphics files:
-starting_keys_g db 'Skeys.bmp',0			;the g in the name is for graphics
-do1_g db '1do.bmp',0				
-re_g db '2re.bmp',0
-mi_g db '3mi.bmp',0
-fa_g db '4fa.bmp',0
+testpic db 'MESSI.bmp',0
+starting_keys_g db 'keys.bmp',0			;the g in the name is for graphics
+do1_g db '1do1.bmp',0				
+re_g db '2re2.bmp',0
+mi_g db '3mi3.bmp',0
+fa_g db '4fa4.bmp',0
 sol_g db '5sol.bmp',0
-la_g db '6la.bmp',0
-si_g db '7si.bmp',0
-do2_g db '8do.bmp',0
-doDiez_g db 'do#.bmp',0
+la_g db '6la6.bmp',0
+si_g db '7si7.bmp',0
+do2_g db '8do8.bmp',0
+doDiez_g db 'do_#.bmp',0
 mi_b_g db 'mi_b.bmp',0
-faDiez_g db 'fa#.bmp',0
+faDiez_g db 'fa_#.bmp',0
 la_b_g db 'la_b.bmp',0
 si_b_g db 'si_b.bmp',0
 
-Graphics_offset dw 1 dup(offset do1_g,offset re_g,offset mi_g,offset fa_g,offset sol_g,offset la_g,offset si_g,offset do2_g,offset doDiez_g,offset mi_b_g,offset faDiez_g,offset la_b_g,offset si_b_g)
+Graphics_offset dw 1 dup(offset do1_g, offset re_g, offset mi_g, offset fa_g, offset sol_g, offset la_g, offset si_g, offset do2_g, offset doDiez_g, offset mi_b_g, offset faDiez_g, offset la_b_g, offset si_b_g)
 
 freq_ARR db 1 dup(33,37,41,44,49,55,62,65,35,39,46,52,58)
 ;index of frequency is according to the order of the notes 
 ;order notes: lower_do, re, mi, fa, sol, la, si, higher_do, do_sharp, mi_flat, fa_sharp, la_flat, si_flat
 
 ;printing variables:
-filename db 'Skeys.bmp',0			;find how to change filename each time
+filename db 'keys.bmp',0			;find how to change filename each time
 filehandle dw ?
 Header db 54 dup (0)
 Palette db 256*4 dup (0)
@@ -35,23 +36,29 @@ ScrLine db 320 dup (0)
 ErrorMsg db 'Error', 13, 10
 
 CODESEG
-proc Key_press							;gets charachter from stack and switches graphics to matching key
+proc Key_press							;gets charachter and switches graphics to matching key
 	push ax 
 	push bx
 	push cx
 	push dx
-	push si
+;	push si
 	push di
 	xor ax,ax
 	mov al,[char]
 	sub al,97	
 	mov bl,2
 	mul bl								;ax has index of correct thing in Graphics_offset
-	mov si,ax
 	mov bx,offset Graphics_offset
-	mov di,[bx+si]						;di has offset of variable that has the name of image
-	mov al,[di]							;al has name of image
-	mov [filename],al
+	add bx,ax
+	mov di,[word ptr bx]				;di has offset of the name of image
+	mov bx,offset filename
+	mov cx,4
+filename_loop:
+		mov al,[di]							;one letter of the name of file
+		mov [bx],al							;moves that letter to filename
+		inc di
+		inc bx
+	loop filename_loop
 	;printing:
 	call OpenFile
 	call ReadHeader
@@ -61,7 +68,7 @@ proc Key_press							;gets charachter from stack and switches graphics to matchi
 	
 finish_key_press:
 	pop di
-	pop si
+;	pop si
 	pop dx
 	pop cx
 	pop bx
@@ -78,12 +85,17 @@ proc Key_sound							;gets char from memory and produces matching sound for the 
 	push dx
 	push si
 	;calculating the number we give the computer
+	mov al,1
+	mov ah,[Octave_num]
+	cmp ah,0
+	jle AfterPower
 	mov cl,[Octave_num]
 	mov al,2
 	mov dl,2
 	power_loop:
 		mul dl				;at the end ax= 2^(Octave_num)
 	loop power_loop
+AfterPower:
 	mov bl,[char]
 	sub bx,97 				;bx has index of note's frequency inside freq_ARR
 	mov si,offset freq_ARR
@@ -113,15 +125,28 @@ endp Key_sound
 
 proc Keys_up							;changes graphics to screen with no keys pressed
 	push ax
-	mov al,[starting_keys_g]
-	mov [filename],al
+	push bx
+	push cx
+	push di
+	mov bx, offset starting_keys_g
+	mov di, offset filename
+keys_loop:
+		mov al,[bx]
+		mov [di],al
+		inc bx
+		inc di
+	loop keys_loop
 	; Process BMP file
 	call OpenFile
 	call ReadHeader
 	call ReadPalette
 	call CopyPal
 	call CopyBitmap
+	pop di
+	pop cx
+	pop bx
 	pop ax
+	ret
 endp Keys_up
 
 
@@ -149,7 +174,7 @@ proc kind_of_char					;stops sound, gets a character from keyboard, and does som
 	not_num:
 	mov al,[char]
 	cmp al,97						;checks if char is letter a-m
-	jl finish_proc
+	jl is_other_thing
 	cmp al,109
 	jg is_q
 	;open speaker
@@ -160,6 +185,7 @@ proc kind_of_char					;stops sound, gets a character from keyboard, and does som
 	mov al,0B6h
 	out 43h,al
 	call Key_sound
+	call CloseFile
 	call Key_press
 	jmp finish_proc
 	
@@ -169,6 +195,7 @@ proc kind_of_char					;stops sound, gets a character from keyboard, and does som
 	jmp exit						;finish the program
 	
 	is_other_thing:
+	call CloseFile
 	call Keys_up
 	
 	finish_proc:
@@ -275,6 +302,20 @@ PrintBMPLoop:
 	loop PrintBMPLoop
 	ret
 endp CopyBitmap
+
+proc CloseFile
+	push ax
+	push bx
+	mov bx,[filehandle]
+	;close file:
+	mov	ah,3Eh
+	int	21h
+	mov [filehandle],0
+	pop bx
+	pop ax
+	ret
+endp CloseFile
+
 	
 
 main_code:
@@ -291,6 +332,12 @@ main_code:
 	;getting access to speaker
 	mov al,0B6h
 	out 43h,al
+	
+	mov al,40
+	out 42h,al
+	mov al,0
+	out 42h,al
+
 the_loop:
 	;recieve character:
 	mov	ah,1
@@ -301,6 +348,11 @@ jmp the_loop
 	
 	
 exit:
+	;back to text mode
+	mov ah, 0
+	mov al, 2
+	int 10h
+	
 	mov ax, 4c00h
 	int 21h
 end main_code
